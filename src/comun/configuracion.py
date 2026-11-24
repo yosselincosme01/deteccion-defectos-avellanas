@@ -26,6 +26,12 @@ for _variable in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
 SEMILLA = 0   # misma semilla en todo el proyecto -> resultados reproducibles
 
 
+def preparar_proceso() -> None:
+    """Se ejecuta al arrancar cada proceso trabajador del Pool
+    (initializer), para que también quede sin modo ahorro de energía."""
+    _desactivar_ahorro_energia_windows()
+
+
 def _desactivar_ahorro_energia_windows() -> None:
     """Pide a Windows que no aplique EcoQoS (estrangulamiento) a este proceso."""
     if sys.platform != "win32":

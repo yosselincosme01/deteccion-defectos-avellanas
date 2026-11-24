@@ -35,6 +35,7 @@ from multiprocessing import Pool
 import numpy as np
 
 from src.comun.caracteristicas import caracteristicas_imagen
+from src.comun.configuracion import preparar_proceso
 from src.comun.modelo_clasico import ejecutar, resumen
 
 
@@ -48,7 +49,9 @@ def extraer_paralelo(rutas: list[str], tam: int, procesos: int = 4,
     tarea = partial(caracteristicas_imagen, tam=tam)   # fija tam para todas
 
     t0 = time.perf_counter()
-    with Pool(processes=procesos) as pool:
+    # initializer: cada trabajador, al arrancar, desactiva el modo ahorro de
+    # energía de Windows (igual que el proceso principal).
+    with Pool(processes=procesos, initializer=preparar_proceso) as pool:
         t1 = time.perf_counter()
         atributos = pool.map(tarea, rutas, chunksize=chunksize)
         t2 = time.perf_counter()
