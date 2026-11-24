@@ -42,7 +42,7 @@ def figura_pocos_datos(df: pd.DataFrame, destino: Path) -> None:
            xlabel="Datos para aprender (n.º de avellanas sanas)", ylabel="AUROC")
     a2.set(title="Ubicar: AUROC por píxel",
            xlabel="Datos para aprender (n.º de avellanas sanas)")
-    a1.legend(loc="lower right")
+    a1.legend(loc="center right", fontsize=8)
     fig.tight_layout()
     fig.savefig(destino)
     plt.close(fig)
