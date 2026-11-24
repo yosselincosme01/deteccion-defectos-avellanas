@@ -221,3 +221,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Dataset (pesa mucho y su licencia no permite redistribuirlo)
+datos/*
+!datos/.gitkeep
+!datos/README.md
