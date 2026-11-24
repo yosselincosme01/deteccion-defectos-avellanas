@@ -226,3 +226,6 @@ __marimo__/
 datos/*
 !datos/.gitkeep
 !datos/README.md
+
+# Mapas de defectos (archivos grandes; se regeneran con experimentos.rendimiento)
+resultados/*.npz
