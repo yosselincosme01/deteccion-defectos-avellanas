@@ -12,6 +12,14 @@ Se calculan dos versiones:
   * de la EXTRACCIÓN (la parte que se paraleliza), y
   * del TOTAL (incluye el GMM secuencial -> muestra la ley de Amdahl).
 
+¿Por qué el MÍNIMO de las repeticiones y no el promedio?
+  El ruido externo (programas de fondo, calentamiento, núcleos de ahorro)
+  solo puede SUMAR tiempo, nunca restarlo. El mínimo es la medición menos
+  contaminada y la mejor estimación del costo real (es lo que recomienda la
+  documentación del módulo timeit de Python). Para no ocultar la variación,
+  la tabla incluye también la mediana, el máximo y la desviación estándar,
+  y las gráficas muestran el rango con barras.
+
 Uso:
     python -m experimentos.graficas_rendimiento
     python -m experimentos.graficas_rendimiento --archivo resultados/rendimiento_prueba.csv
@@ -31,19 +39,26 @@ plt.rcParams.update({"figure.dpi": 150, "font.size": 10,
 
 
 def resumir(df: pd.DataFrame) -> pd.DataFrame:
-    """Media y desviación por (tamaño, procesos) + speedup y eficiencia."""
+    """Mínimo, mediana, máximo y desviación por (tamaño, procesos),
+    + speedup y eficiencia calculados con el mínimo."""
     df = df.fillna({"t_crear_pool": 0, "t_cerrar_pool": 0})
     g = df.groupby(["tam", "procesos"]).agg(
         reps=("t_total", "size"),
-        ext_media=("t_extraccion", "mean"), ext_desv=("t_extraccion", "std"),
-        tot_media=("t_total", "mean"), tot_desv=("t_total", "std"),
-        crear_pool=("t_crear_pool", "mean"), calculo=("t_calculo", "mean"),
-        gmm=("t_gmm", "mean"), puntuacion=("t_puntuacion", "mean"),
+        ext_min=("t_extraccion", "min"), ext_mediana=("t_extraccion", "median"),
+        ext_max=("t_extraccion", "max"), ext_desv=("t_extraccion", "std"),
+        tot_min=("t_total", "min"), tot_mediana=("t_total", "median"),
+        tot_max=("t_total", "max"), tot_desv=("t_total", "std"),
+        crear_pool=("t_crear_pool", "min"), calculo=("t_calculo", "min"),
+        gmm=("t_gmm", "min"), puntuacion=("t_puntuacion", "min"),
         auroc=("auroc_imagen", "mean")).reset_index()
     for parte in ("ext", "tot"):
-        t1 = g[g.procesos == 1].set_index("tam")[f"{parte}_media"]
-        g[f"speedup_{parte}"] = g.tam.map(t1) / g[f"{parte}_media"]
+        t1 = g[g.procesos == 1].set_index("tam")
+        base = g.tam.map(t1[f"{parte}_min"])
+        g[f"speedup_{parte}"] = base / g[f"{parte}_min"]
         g[f"eficiencia_{parte}"] = g[f"speedup_{parte}"] / g.procesos
+        # rango del speedup: peor y mejor caso posibles con las repeticiones
+        g[f"speedup_{parte}_bajo"] = g.tam.map(t1[f"{parte}_min"]) / g[f"{parte}_max"]
+        g[f"speedup_{parte}_alto"] = g.tam.map(t1[f"{parte}_max"]) / g[f"{parte}_min"]
     return g
 
 
@@ -63,9 +78,10 @@ def figura_speedup(g: pd.DataFrame, destino: Path) -> None:
     a1.plot(p, p, ":", color=GRIS, label="ideal")
     a2.axhline(1, ls=":", color=GRIS)
     a1.set(xlabel="Procesos (p)", ylabel="Speedup  T(1) / T(p)",
-           title="Aceleración", xticks=p)
+           title="Aceleración (mínimo de 3 repeticiones)", xticks=p)
     a2.set(xlabel="Procesos (p)", ylabel="Eficiencia  S(p) / p",
-           title="Eficiencia", xticks=p, ylim=(0, 1.15))
+           title="Eficiencia", xticks=p,
+           ylim=(0, max(1.15, g[["eficiencia_ext", "eficiencia_tot"]].max().max() + .1)))
     a1.legend(fontsize=8)
     fig.tight_layout()
     fig.savefig(destino)
@@ -87,7 +103,7 @@ def figura_desglose(g: pd.DataFrame, destino: Path) -> None:
             eje.bar(s.procesos.astype(str), s[col], bottom=abajo,
                     color=color, label=nombre)
             abajo += s[col]
-        eje.set(xlabel="Procesos (p)", ylabel="Tiempo medio (s)",
+        eje.set(xlabel="Procesos (p)", ylabel="Tiempo mínimo (s)",
                 title=f"{tam} px")
     ejes[0][0].legend(fontsize=8)
     fig.tight_layout()
@@ -105,9 +121,10 @@ def main():
     figura_speedup(g, RAIZ / "figuras" / "fig_speedup_eficiencia.png")
     figura_desglose(g, RAIZ / "figuras" / "fig_desglose_tiempos.png")
 
-    tabla = g[["tam", "procesos", "reps", "ext_media", "ext_desv",
-               "tot_media", "tot_desv", "speedup_ext", "eficiencia_ext",
-               "speedup_tot", "eficiencia_tot", "auroc"]].round(3)
+    tabla = g[["tam", "procesos", "reps", "ext_min", "ext_mediana", "ext_max",
+               "ext_desv", "tot_min", "tot_mediana", "speedup_ext",
+               "eficiencia_ext", "speedup_tot", "eficiencia_tot",
+               "gmm", "auroc"]].round(3)
     (RAIZ / "resultados" / "tabla_rendimiento.md").write_text(
         tabla.to_markdown(index=False), encoding="utf-8")
     print(tabla.to_string(index=False))

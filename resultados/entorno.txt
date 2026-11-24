@@ -1,0 +1,9 @@
+sistema: Windows-11-10.0.26200-SP0
+procesador: Intel64 Family 6 Model 186 Stepping 2, GenuineIntel
+nucleos_logicos: 16
+python: 3.12.10
+numpy: 2.5.5
+opencv: 5.1.0
+scikit-learn: 1.9.1
+scikit-image: 0.26.0
+fecha: 2026-11-24T15:33:17
