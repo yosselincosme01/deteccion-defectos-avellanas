@@ -43,6 +43,15 @@ TAM_BANCO = 50_000    # zonas sanas guardadas en memoria
 LOTE = 16             # imágenes que pasan juntas por la red
 
 
+def sincronizar(disp: torch.device) -> None:
+    """En GPU las operaciones son ASÍNCRONAS: la CPU sigue avanzando mientras
+    la GPU trabaja. Sin esperar a que termine, time.perf_counter() mediría
+    solo el tiempo de "encargar" el trabajo, no el de hacerlo.
+    En CPU no hace nada."""
+    if disp.type == "cuda":
+        torch.cuda.synchronize(disp)
+
+
 class ExtractorResNet:
     """Convierte imágenes en un vector de 384 números por cada zona."""
 
@@ -50,12 +59,18 @@ class ExtractorResNet:
         self.disp = torch.device(dispositivo)
         self.red = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
         self.red.eval().to(self.disp)       # modo evaluación: no se entrena
+        self.t_hacia_disp = 0.0             # tiempo copiando imágenes a la GPU
 
     @torch.no_grad()                        # no calcula gradientes (más rápido)
     def __call__(self, imagenes: np.ndarray) -> torch.Tensor:
         """imagenes: (B, tam, tam, 3) uint8 -> (B, 384, tam/8, tam/8)"""
         x = torch.from_numpy(imagenes).permute(0, 3, 1, 2).float() / 255.0
-        x = ((x - MEDIA) / DESV).to(self.disp)
+        x = (x - MEDIA) / DESV
+        sincronizar(self.disp)
+        t = time.perf_counter()
+        x = x.to(self.disp)                 # transferencia CPU -> GPU
+        sincronizar(self.disp)
+        self.t_hacia_disp += time.perf_counter() - t
         r = self.red
         x = r.maxpool(r.relu(r.bn1(r.conv1(x))))
         f2 = r.layer2(r.layer1(x))     # 128 canales, 1/8 del tamaño: detalles finos
@@ -91,10 +106,14 @@ def ejecutar(tam: int = 256, fraccion: float = 1.0, dispositivo: str = "cpu",
     rutas_ent = imagenes_entrenamiento(fraccion=fraccion)
     prueba = muestras_prueba()
     ext = ExtractorResNet(dispositivo)
+    disp = ext.disp
+    if disp.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(disp)
     rng = np.random.default_rng(SEMILLA)
     por_imagen = math.ceil(TAM_BANCO / len(rutas_ent))
 
     # 1. Banco de memoria: zonas de avellanas sanas (submuestra fija)
+    sincronizar(disp)
     t0 = time.perf_counter()
     banco = []
     for imgs in _lotes(rutas_ent, tam):
@@ -103,21 +122,26 @@ def ejecutar(tam: int = 256, fraccion: float = 1.0, dispositivo: str = "cpu",
             idx = torch.from_numpy(rng.choice(len(zonas), k, replace=False))
             banco.append(zonas[idx.to(zonas.device)])
     banco = torch.cat(banco)
+    sincronizar(disp)
     t1 = time.perf_counter()
 
     # 2. Imágenes de prueba: red + búsqueda del vecino más cercano
-    t_red = t_knn = 0.0
+    t_red = t_knn = t_desde_disp = 0.0
     puntajes, mapas = [], []
     for imgs in _lotes([m.ruta for m in prueba], tam):
         ta = time.perf_counter()
         f = ext(imgs)
         h, w = f.shape[-2:]
+        sincronizar(disp)
         tb = time.perf_counter()
         for zonas in _a_zonas(f):
             # distancia de cada zona a TODO el banco; nos quedamos con la menor
             dist = torch.cat([torch.cdist(z, banco).min(dim=1).values
                               for z in zonas.split(1024)])
-            rejilla = dist.reshape(h, w).cpu().numpy().astype(np.float32)
+            sincronizar(disp)
+            tc = time.perf_counter()
+            rejilla = dist.reshape(h, w).cpu().numpy().astype(np.float32)  # GPU -> CPU
+            t_desde_disp += time.perf_counter() - tc
             mapa = cv2.resize(rejilla, (tam, tam), interpolation=cv2.INTER_LINEAR)
             mapa = cv2.GaussianBlur(mapa, (0, 0), sigmaX=tam / 64)
             mapas.append(mapa)
@@ -135,6 +159,12 @@ def ejecutar(tam: int = 256, fraccion: float = 1.0, dispositivo: str = "cpu",
         "t_red_prueba": t_red,       # red sobre las imágenes de prueba
         "t_knn": t_knn,              # búsqueda del vecino más cercano
         "t_total": t2 - t0,
+        # Transferencias (en CPU son ~0): imágenes hacia el dispositivo y
+        # mapas de vuelta. Están INCLUIDAS en t_banco / t_red_prueba / t_knn.
+        "t_hacia_disp": ext.t_hacia_disp,
+        "t_desde_disp": t_desde_disp,
+        "mem_gpu_pico_mb": (torch.cuda.max_memory_allocated(disp) / 2**20
+                            if disp.type == "cuda" else 0.0),
         **resumen_calidad(prueba, puntajes, mapas),
         "puntajes": puntajes, "mapas": mapas, "muestras": prueba,
     }

@@ -101,7 +101,7 @@ def ejecutar(extraer, tam: int = 256, fraccion: float = 1.0) -> dict:
         "t_puntuacion": t3 - t2, "t_total": t3 - t0,
         **info,
         # AUROC rápido para comprobar calidad; las métricas completas
-        # (F1, AUROC por píxel...) estarán en src/comun/metricas.py (Emmy).
+        # (F1, AUROC por píxel, IoU...) están en src/comun/metricas.py.
         "auroc_imagen": float(roc_auc_score(etiquetas, puntajes)),
         "atributos": atributos, "puntajes": puntajes, "mapas": mapas,
         "muestras": prueba,
