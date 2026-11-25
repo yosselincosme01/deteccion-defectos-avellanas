@@ -1,0 +1,17 @@
+equipo: B
+sistema: Windows-11-10.0.26300-SP0
+procesador: AMD Ryzen 7 7435HS
+nucleos_fisicos: 8
+nucleos_logicos: 16
+ram_gb: 23.7
+gpu: NVIDIA GeForce RTX 4060 Laptop GPU
+cuda_torch: 12.8
+python: 3.12.10
+numpy: 2.5.4
+opencv: 5.1.0
+scikit-learn: 1.9.1
+scikit-image: 0.26.0
+torch: 2.11.0+cu128
+torchvision: 0.26.0+cu128
+psutil: 7.2.2
+fecha: 2026-11-24T22:44:19
