@@ -42,6 +42,43 @@ def auroc_pixel(muestras, mapas) -> float:
                                np.concatenate(puntajes)))
 
 
+def iou_pixel(muestras, mapas) -> dict:
+    """IoU (intersección sobre unión) de la localización del defecto.
+
+    Se binariza el mapa con un umbral y se compara con la máscara real:
+        IoU = píxeles marcados Y defectuosos / píxeles marcados O defectuosos
+    El umbral es el que maximiza el F1 por píxel. Como IoU = F1 / (2 - F1),
+    ese mismo umbral es también el que maximiza la IoU global. Igual que
+    mejor_f1, se elige sobre el propio conjunto de prueba (valor optimista).
+
+    Devuelve:
+      iou_global: todos los píxeles de las 110 imágenes juntos.
+      iou_medio:  promedio de la IoU de cada imagen CON defecto (las sanas
+                  no tienen región que comparar).
+    """
+    mascaras, mapas_256 = [], []
+    for m, mapa in zip(muestras, mapas):
+        mapas_256.append(cv2.resize(np.asarray(mapa, dtype=np.float32),
+                                    (TAM_EVAL_PIXEL, TAM_EVAL_PIXEL),
+                                    interpolation=cv2.INTER_LINEAR))
+        mascaras.append(cargar_mascara(m.ruta_mascara, TAM_EVAL_PIXEL))
+    real = np.stack(mascaras)
+    puntaje = np.stack(mapas_256)
+
+    p, r, umbrales = precision_recall_curve(real.ravel(), puntaje.ravel())
+    f1 = 2 * p * r / np.maximum(p + r, 1e-12)
+    umbral = float(umbrales[int(np.argmax(f1[:-1]))])
+
+    pred = puntaje >= umbral
+    inter = np.sum(pred & real)
+    union = np.sum(pred | real)
+    ious = [np.sum(pr & re) / np.sum(pr | re)
+            for pr, re, m in zip(pred, real, muestras) if m.etiqueta == 1]
+    return {"umbral_pixel": umbral,
+            "iou_global": float(inter / union),
+            "iou_medio": float(np.mean(ious))}
+
+
 def mejor_f1(etiquetas, puntajes) -> dict:
     """Umbral que maximiza F1, con su precisión, recall y errores.
 

@@ -100,7 +100,8 @@ deteccion-defectos-avellanas/
 │   ├── rendimiento.py          # E1 y E2
 │   ├── graficas_rendimiento.py
 │   ├── calidad.py              # E3, E4 y E5
-│   └── graficas_calidad.py
+│   ├── graficas_calidad.py
+│   └── memoria_iou.py          # E6 y E7 (memoria, IoU, CPU frente a GPU)
 ├── resultados/                 # CSV y tablas con los resultados
 └── figuras/                    # Gráficas y mapas de defectos
 ```
@@ -165,6 +166,23 @@ python -m experimentos.graficas_calidad
 
 Para pruebas cortas, agregar `--rapido` a `rendimiento` o `calidad`.
 
+**E6 y E7 (segundo equipo, con GPU).** Miden memoria pico, IoU de la localización y el método profundo en CPU frente a GPU. Escriben solo sus propios archivos (`e6_*.csv`, `e7_*.csv`, `entorno_equipo_b.txt`), sin tocar los resultados de E1–E5:
+
+```powershell
+python -m experimentos.memoria_iou            # E6 y E7 (~20 min)
+python -m experimentos.memoria_iou --solo e6  # solo memoria e IoU
+python -m experimentos.memoria_iou --solo e7  # solo CPU frente a GPU
+```
+
+Para usar la GPU hay que instalar PyTorch con CUDA **antes** que el resto de dependencias (ejemplo para CUDA 12.8):
+
+```powershell
+python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+python -m pip install -r requirements.txt
+```
+
+Sin GPU, E7 mide solo la CPU.
+
 **Condiciones de medición.** Los tiempos son muy sensibles a la carga de la máquina. Para resultados comparables:
 
 - equipo conectado a la corriente y en modo de máximo rendimiento;
@@ -181,7 +199,10 @@ Con programas abiertos, el mismo cálculo llegó a variar hasta 8 veces. Por eso
 | `resultados/calidad.csv` | Cada ejecución de E3, E4 y E5: todas las métricas y tiempos |
 | `resultados/tabla_rendimiento.md` | Resumen: mínimo, mediana, speedup y eficiencia |
 | `resultados/tabla_calidad.md` | Resumen de calidad por método y condición |
-| `resultados/entorno.txt` | Sistema y versiones de las librerías |
+| `resultados/entorno.txt` | Sistema y versiones de las librerías (equipo A) |
+| `resultados/e6_memoria_iou.csv` | E6: memoria pico e IoU de cada método (equipo B) |
+| `resultados/e7_cpu_gpu.csv` | E7: profundo en CPU y GPU, con transferencia separada (equipo B) |
+| `resultados/entorno_equipo_b.txt` | Sistema, GPU y versiones del equipo B |
 | `figuras/` | Speedup, eficiencia, desglose de tiempos, pocos datos y mapas |
 
 Los mapas de defectos (`resultados/*.npz`, ~25 MB cada uno) no se suben; se regeneran al correr los experimentos.
